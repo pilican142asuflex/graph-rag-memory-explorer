@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphRAG & Agentic Memory Explorer | AI Research Workbench</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f6ff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            900: '#1e3a8a',
+                        },
+                        dark: {
+                            bg: '#090d16',
+                            card: '#111726',
+                            border: '#1f293d',
+                            accent: '#1e293b'
+                        },
+                        node: {
+                            user: '#ec4899',
+                            episodic: '#a855f7',
+                            semantic: '#3b82f6',
+                            entity: '#10b981',
+                            procedural: '#f59e0b',
+                            llm: '#6366f1'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Vis-Network for Graph Visualization -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        /* Custom styling & glassmorphism */
+        body {
+            background-color: #090d16;
+            color: #f3f4f6;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        .glass-panel {
+            background: rgba(17, 23, 38, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(31, 41, 61, 0.8);
+        }
+        .glow-effect {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #090d16;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f293d;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #374151;
+        }
+        /* Network container styling */
+        #network-canvas {
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 50% 50%, #111827 0%, #090d16 100%);
+        }
+        .pulse-dot {
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+            animation: pulse 1.6s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col overflow-hidden select-none">
+
+    <!-- Top Navigation Header -->
+    <header class="h-14 glass-panel border-b border-dark-border px-4 flex items-center justify-between z-30 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="h-8 w-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white font-bold shadow-lg shadow-blue-500/30">
+                <i class="fa-solid fa-diagram-project text-sm"></i>
+            </div>
+            <div>
+                <h1 class="text-sm font-semibold tracking-wide text-gray-100 flex items-center gap-2">
+                    GraphRAG & Agentic Memory Explorer
+                    <span class="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-mono font-medium">v3.4-Hybrid</span>
+                </h1>
+                <p class="text-[11px] text-gray-400">Episodic Modeling • Entity Resolution • Graph Search Benchmark</p>
+            </div>
+        </div>
+
+        <!-- Quick Status & Actions -->
+        <div class="flex items-center space-x-4">
+            <div class="hidden lg:flex items-center space-x-6 text-xs text-gray-400 border-r border-dark-border pr-4">
+                <div class="flex items-center space-x-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 pulse-dot"></span>
+                    <span>Consolidation Pipeline: <strong class="text-gray-200 font-mono">ACTIVE</strong></span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-database text-blue-400"></i>
+                    <span>Graph Index: <strong class="text-gray-200 font-mono">14,820 Nodes</strong></span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-[#6366f1] fa-bolt text-amber-400"></i>
+                    <span>GraphRAG Latency: <strong class="text-gray-200 font-mono" id="live-latency">14.2 ms</strong></span>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <button id="reset-graph-btn" class="px-3 py-1.5 text-xs bg-dark-card hover:bg-dark-border text-gray-300 border border-dark-border rounded-md transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-rotate-left text-gray-400"></i> Reset Graph
+                </button>
+                <button id="export-json-btn" class="px-3 py-1.5 text-xs bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 rounded-md transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-download"></i> Telemetry Export
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Dashboard -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+        <!-- Sidebar: Controls & Configuration -->
+        <aside class="w-80 glass-panel border-r border-dark-border flex flex-col z-20 shrink-0">
+            <div class="p-4 border-b border-dark-border flex items-center justify-between">
+                <span class="text-xs font-semibold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-blue-400"></i> Agentic Control Layer
+                </span>
+                <span class="text-[10px] text-gray-500">Parameters</span>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-4 space-y-5 text-xs">
+                <!-- Preset Topology Selector -->
+                <div>
+                    <label class="block text-gray-400 mb-1.5 font-medium">Domain Topology Preset</label>
+                    <select id="preset-selector" class="w-full bg-dark-bg border border-dark-border rounded-md px-2.5 py-1.5 text-gray-200 focus:outline-none focus:border-blue-500 transition">
+                        <option value="code-rag">Code Intelligence RAG (AST + Dependency)</option>
+                        <option value="agent-memory" selected>Agent Memory Consolidation System</option>
+                        <option value="medical-kg">Biomedical Entity Resolution Graph</option>
+                        <option value="custom">Custom Sandbox Graph</option>
+                    </select>
+                </div>
+
+                <!-- Retrieval Mode -->
+                <div>
+                    <label class="block text-gray-400 mb-1.5 font-medium">Retrieval & Traversal Strategy</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button class="retrieval-mode-btn active px-2.5 py-1.5 rounded bg-blue-600/20 border border-blue-500/50 text-blue-300 text-left transition font-mono text-[11px]" data-mode="graphrag">
+                            <i class="fa-solid fa-diagram-next mb-1 block text-blue-400"></i> GraphRAG Hybrid
+                        </button>
+                        <button class="retrieval-mode-btn px-2.5 py-1.5 rounded bg-dark-bg border border-dark-border text-gray-400 text-left transition hover:border-gray-600 font-mono text-[11px]" data-mode="vector">
+                            <i class="fa-solid fa-align-center mb-1 block text-gray-500"></i> Vector-Only KNN
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Hyperparameters Slider Controls -->
+                <div class="space-y-4 pt-2 border-t border-dark-border/60">
+                    <div>
+                        <div class="flex justify-between text-gray-400 mb-1">
+                            <span>Multi-Hop Traversal Depth ($k$)</span>
+                            <span id="hop-val" class="font-mono text-blue-400">2 Hops</span>
+                        </div>
+                        <input type="range" id="hop-depth" min="1" max="4" value="2" class="w-full accent-blue-500 h-1 bg-dark-border rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-gray-400 mb-1">
+                            <span>Edge Confidence Threshold ($\theta$)</span>
+                            <span id="conf-val" class="font-mono text-blue-400">0.65</span>
+                        </div>
+                        <input type="range" id="conf-threshold" min="0.1" max="0.95" step="0.05" value="0.65" class="w-full accent-blue-500 h-1 bg-dark-border rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-gray-400 mb-1">
+                            <span>Memory Decay Rate ($\gamma$)</span>
+                            <span id="decay-val" class="font-mono text-blue-400">0.02 /hr</span>
+                        </div>
+                        <input type="range" id="memory-decay" min="0.00" max="0.10" step="0.01" value="0.02" class="w-full accent-blue-500 h-1 bg-dark-border rounded-lg appearance-none cursor-pointer">
+                    </div>
+                </div>
+
+                <!-- Entity Node Filter Toggles -->
+                <div class="pt-2 border-t border-dark-border/60">
+                    <label class="block text-gray-400 mb-2 font-medium">Active Graph Layers</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center justify-between text-gray-300 cursor-pointer">
+                            <span class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-pink-500"></span> User Intent / Query Nodes
+                            </span>
+                            <input type="checkbox" checked class="layer-toggle accent-pink-500 rounded" data-type="user">
+                        </label>
+                        <label class="flex items-center justify-between text-gray-300 cursor-pointer">
+                            <span class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span> Episodic Memory Tiers
+                            </span>
+                            <input type="checkbox" checked class="layer-toggle accent-purple-500 rounded" data-type="episodic">
+                        </label>
+                        <label class="flex items-center justify-between text-gray-300 cursor-pointer">
+                            <span class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Semantic Graph Index
+                            </span>
+                            <input type="checkbox" checked class="layer-toggle accent-blue-500 rounded" data-type="semantic">
+                        </label>
+                        <label class="flex items-center justify-between text-gray-300 cursor-pointer">
+                            <span class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Resolved Entities
+                            </span>
+                            <input type="checkbox" checked class="layer-toggle accent-emerald-500 rounded" data-type="entity">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Action Button Trigger -->
+                <div class="pt-3">
+                    <button id="consolidate-btn" class="w-full py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-md font-medium shadow-md shadow-purple-900/30 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-brain"></i> Trigger Memory Consolidation
+                    </button>
+                </div>
+            </div>
+
+            <!-- Agent Memory State Footprint -->
+            <div class="p-3 bg-dark-bg border-t border-dark-border text-[11px] text-gray-400 flex justify-between items-center">
+                <span>Working Context Window</span>
+                <span class="font-mono text-emerald-400 bg-emerald-950/50 border border-emerald-800/40 px-1.5 py-0.5 rounded">4,096 / 128,000 tk</span>
+            </div>
+        </aside>
+
+        <!-- Center Interactive Network Visualizer -->
+        <main class="flex-1 flex flex-col relative bg-dark-bg overflow-hidden">
+            
+            <!-- Canvas Overlay UI Controls -->
+            <div class="absolute top-4 left-4 z-10 flex items-center space-x-2">
+                <div class="glass-panel rounded-lg p-1.5 flex items-center space-x-1 border border-dark-border shadow-xl">
+                    <button id="zoom-in" class="w-7 h-7 flex items-center justify-center text-gray-300 hover:bg-dark-border rounded transition" title="Zoom In"><i class="fa-solid fa-plus text-xs"></i></button>
+                    <button id="zoom-out" class="w-7 h-7 flex items-center justify-center text-gray-300 hover:bg-dark-border rounded transition" title="Zoom Out"><i class="fa-solid fa-minus text-xs"></i></button>
+                    <div class="w-px h-4 bg-dark-border"></div>
+                    <button id="fit-canvas" class="w-7 h-7 flex items-center justify-center text-gray-300 hover:bg-dark-border rounded transition" title="Fit to Screen"><i class="fa-solid fa-expand text-xs"></i></button>
+                    <button id="toggle-physics" class="px-2.5 h-7 flex items-center justify-center text-xs text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded transition gap-1.5" title="Pause Physics">
+                        <i class="fa-solid fa-pause text-[10px]"></i> Freeze Topology
+                    </button>
+                </div>
+            </div>
+
+            <!-- Legend Badge Overlay -->
+            <div class="absolute top-4 right-4 z-10 glass-panel px-3 py-2 rounded-lg border border-dark-border text-[11px] flex items-center space-x-4 shadow-xl">
+                <div class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-pink-500"></span><span class="text-gray-300">User Query</span></div>
+                <div class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span><span class="text-gray-300">Episodic</span></div>
+                <div class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span><span class="text-gray-300">Semantic Engine</span></div>
+                <div class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span><span class="text-gray-300">Entity Node</span></div>
+            </div>
+
+            <!-- Graph Canvas Component -->
+            <div id="network-canvas" class="flex-1 cursor-grab active:cursor-grabbing"></div>
+
+            <!-- Bottom Drawer: Dynamic Query Sandbox & Benchmarking Telemetry -->
+            <div class="h-64 glass-panel border-t border-dark-border flex flex-col z-10">
+                <!-- Tab Headers -->
+                <div class="h-9 px-4 border-b border-dark-border flex items-center justify-between bg-dark-card/50">
+                    <div class="flex space-x-4">
+                        <button class="drawer-tab active text-xs font-medium text-blue-400 border-b-2 border-blue-500 pb-2 pt-2 flex items-center gap-1.5" data-tab="sandbox">
+                            <i class="fa-solid fa-terminal"></i> Multi-Hop Query Sandbox
+                        </button>
+                        <button class="drawer-tab text-xs font-medium text-gray-400 hover:text-gray-200 border-b-2 border-transparent pb-2 pt-2 flex items-center gap-1.5" data-tab="telemetry">
+                            <i class="fa-solid fa-chart-line"></i> Benchmark & Retrieval Evaluation
+                        </button>
+                        <button class="drawer-tab text-xs font-medium text-gray-400 hover:text-gray-200 border-b-2 border-transparent pb-2 pt-2 flex items-center gap-1.5" data-tab="node-details">
+                            <i class="fa-solid fa-circle-info"></i> Node Inspector <span id="selected-node-badge" class="hidden text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.2 rounded font-mono">None</span>
+                        </button>
+                    </div>
+                    <span class="text-[11px] text-gray-500 font-mono">Response Telemetry Channel</span>
+                </div>
+
+                <!-- Tab Contents -->
+                <div class="flex-1 p-3 overflow-hidden">
+                    
+                    <!-- Tab 1: Sandbox -->
+                    <div id="tab-sandbox" class="tab-content h-full flex gap-4">
+                        <div class="w-1/3 flex flex-col justify-between space-y-2">
+                            <div>
+                                <label class="block text-[11px] text-gray-400 mb-1">Simulate Agentic Knowledge Query</label>
+                                <div class="relative">
+                                    <input type="text" id="query-input" value="Retrieve temporal context for user preference on code optimization" class="w-full bg-dark-bg border border-dark-border rounded px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-blue-500 pr-8 font-mono">
+                                    <i class="fa-solid fa-magnifying-glass absolute right-3 top-2.5 text-gray-500 text-xs"></i>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-[11px]">
+                                <div class="bg-dark-bg p-2 rounded border border-dark-border">
+                                    <span class="text-gray-500 block">Traversal Strategy</span>
+                                    <span id="telemetry-strategy" class="text-blue-400 font-mono">GraphRAG + Sub-Graph</span>
+                                </div>
+                                <div class="bg-dark-bg p-2 rounded border border-dark-border">
+                                    <span class="text-gray-500 block">Cosine Similarity</span>
+                                    <span id="telemetry-sim" class="text-emerald-400 font-mono">0.9482</span>
+                                </div>
+                            </div>
+                            <button id="run-query-btn" class="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-paper-plane text-[10px]"></i> Execute Hybrid Retrieval Pipeline
+                            </button>
+                        </div>
+
+                        <div class="flex-1 bg-dark-bg rounded border border-dark-border p-2.5 font-mono text-[11px] overflow-y-auto relative">
+                            <div class="absolute top-2 right-2 text-[10px] text-gray-500">JSON Retrieval Telemetry</div>
+                            <pre id="json-output" class="text-blue-300 leading-relaxed"></pre>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Evaluation Metrics -->
+                    <div id="tab-telemetry" class="tab-content h-full hidden flex gap-4">
+                        <div class="w-1/2 h-full bg-dark-bg p-2 rounded border border-dark-border flex flex-col">
+                            <span class="text-[11px] text-gray-400 font-medium mb-1">Recall@k Performance: GraphRAG vs Vector-Only</span>
+                            <div class="flex-1 relative">
+                                <canvas id="chart-recall"></canvas>
+                            </div>
+                        </div>
+                        <div class="w-1/2 h-full bg-dark-bg p-2 rounded border border-dark-border flex flex-col">
+                            <span class="text-[11px] text-gray-400 font-medium mb-1">Node Degree & Relation Centrality Distribution</span>
+                            <div class="flex-1 relative">
+                                <canvas id="chart-centrality"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 3: Node Inspector -->
+                    <div id="tab-node-details" class="tab-content h-full hidden overflow-y-auto">
+                        <div id="node-inspector-empty" class="h-full flex items-center justify-center text-gray-500 text-xs">
+                            <i class="fa-solid fa-arrow-pointer mr-2"></i> Click on any node in the interactive topology graph to inspect vector embeddings and entity metadata.
+                        </div>
+                        <div id="node-inspector-content" class="hidden space-y-3">
+                            <div class="flex justify-between items-start border-b border-dark-border pb-2">
+                                <div>
+                                    <h3 id="inspector-title" class="text-sm font-semibold text-gray-200">Node Inspector</h3>
+                                    <span id="inspector-type" class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-mono">Entity</span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-[11px] text-gray-400 block">Node ID: <span id="inspector-id" class="font-mono text-gray-200">N-102</span></span>
+                                    <span class="text-[11px] text-gray-400 block">PageRank: <span id="inspector-pagerank" class="font-mono text-emerald-400">0.084</span></span>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3 text-xs">
+                                <div class="bg-dark-bg p-2.5 rounded border border-dark-border">
+                                    <span class="text-gray-500 block text-[10px]">Vector Embedding (Dim 1536 Preview)</span>
+                                    <p id="inspector-embedding" class="font-mono text-[10px] text-purple-300 break-all mt-1">[0.0241, -0.1192, 0.8841, 0.3102, ...]</p>
+                                </div>
+                                <div class="bg-dark-bg p-2.5 rounded border border-dark-border">
+                                    <span class="text-gray-500 block text-[10px]">Graph Neighbors ($k$-Hop)</span>
+                                    <ul id="inspector-neighbors" class="list-disc list-inside text-gray-300 mt-1 space-y-0.5 text-[11px]"></ul>
+                                </div>
+                                <div class="bg-dark-bg p-2.5 rounded border border-dark-border">
+                                    <span class="text-gray-500 block text-[10px]">Memory Consolidation Status</span>
+                                    <p id="inspector-status" class="text-emerald-400 font-mono text-[11px] mt-1">Consolidated to Long-Term Graph</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // Global State & Data Models
+        let network = null;
+        let nodesDataSet = null;
+        let edgesDataSet = null;
+        let physicsEnabled = true;
+        let selectedNodeId = null;
+
+        // Color Schema Mapping
+        const nodeColors = {
+            user: { background: '#ec4899', border: '#f472b6', highlight: { background: '#f472b6', border: '#fbcfe8' } },
+            episodic: { background: '#a855f7', border: '#c084fc', highlight: { background: '#c084fc', border: '#e9d5ff' } },
+            semantic: { background: '#3b82f6', border: '#60a5fa', highlight: { background: '#60a5fa', border: '#bfdbfe' } },
+            entity: { background: '#10b981', border: '#34d399', highlight: { background: '#34d399', border: '#a7f3d0' } },
+            procedural: { background: '#f59e0b', border: '#fbbf24', highlight: { background: '#fbbf24', border: '#fef08a' } }
+        };
+
+        // Datasets for Presets
+        const presetsData = {
+            'agent-memory': {
+                nodes: [
+                    { id: 1, label: 'User Context Window', group: 'user', title: 'Active session context' },
+                    { id: 2, label: 'User Intent: Code Refactor', group: 'user', title: 'Query node' },
+                    { id: 3, label: 'Episodic Trace #841', group: 'episodic', title: 'Short-term memory log' },
+                    { id: 4, label: 'Episodic Trace #842', group: 'episodic', title: 'Short-term memory log' },
+                    { id: 5, label: 'GraphRAG Retrieval Core', group: 'semantic', title: 'Hybrid search engine' },
+                    { id: 6, label: 'Vector Index (Dense 3072d)', group: 'semantic', title: 'Embedding collection' },
+                    { id: 7, label: 'Entity: Python AST Parser', group: 'entity', title: 'Resolved concept entity' },
+                    { id: 8, label: 'Entity: Concurrency Primitives', group: 'entity', title: 'Resolved concept entity' },
+                    { id: 9, label: 'Procedural Rule: Avoid Mutex Locks', group: 'procedural', title: 'Consolidated long-term rule' },
+                    { id: 10, label: 'Entity: Memory Safety', group: 'entity', title: 'Resolved domain node' }
+                ],
+                edges: [
+                    { from: 1, to: 2, label: 'HAS_INTENT', value: 0.95 },
+                    { from: 2, to: 3, label: 'STORED_IN', value: 0.88 },
+                    { from: 2, to: 4, label: 'STORED_IN', value: 0.76 },
+                    { from: 3, to: 5, label: 'TRAVERSES', value: 0.90 },
+                    { from: 5, to: 6, label: 'QUERIES', value: 0.99 },
+                    { from: 5, to: 7, label: 'EXTRACTS', value: 0.85 },
+                    { from: 5, to: 8, label: 'EXTRACTS', value: 0.92 },
+                    { from: 7, to: 9, label: 'TRIGGERS_PROCEDURE', value: 0.81 },
+                    { from: 8, to: 10, label: 'ASSOCIATED_WITH', value: 0.89 },
+                    { from: 4, to: 9, label: 'CONSOLIDATES_TO', value: 0.72 }
+                ]
+            },
+            'code-rag': {
+                nodes: [
+                    { id: 101, label: 'main.py', group: 'user', title: 'Source entry' },
+                    { id: 102, label: 'AST Transformer', group: 'semantic', title: 'Abstract Syntax Tree' },
+                    { id: 103, label: 'Class: GraphRAGPipeline', group: 'entity', title: 'Class declaration' },
+                    { id: 104, label: 'Method: retrieve_subgraph()', group: 'entity', title: 'Method signature' },
+                    { id: 105, label: 'Pinecone Vector DB', group: 'semantic', title: 'External store' },
+                    { id: 106, label: 'LLM Synthesis Prompt', group: 'procedural', title: 'Prompt template' }
+                ],
+                edges: [
+                    { from: 101, to: 102, label: 'PARSED_BY', value: 0.98 },
+                    { from: 102, to: 103, label: 'CONTAINS', value: 0.92 },
+                    { from: 103, to: 104, label: 'DECLARES', value: 0.95 },
+                    { from: 104, to: 105, label: 'FETC_EMBEDDINGS', value: 0.89 },
+                    { from: 104, to: 106, label: 'INJECTS_CONTEXT', value: 0.94 }
+                ]
+            },
+            'medical-kg': {
+                nodes: [
+                    { id: 201, label: 'Patient Brain MRI Scan', group: 'user', title: 'Input multimodal data' },
+                    { id: 202, label: 'Swin Transformer Vision Backbone', group: 'semantic', title: 'Feature extractor' },
+                    { id: 203, label: 'Entity: Glioma Region', group: 'entity', title: 'Detected lesion' },
+                    { id: 204, label: 'Entity: T1-Weighted Sequence', group: 'entity', title: 'Scan protocol' },
+                    { id: 205, label: 'Medical Ontology (SNOMED-CT)', group: 'procedural', title: 'Knowledge base' }
+                ],
+                edges: [
+                    { from: 201, to: 202, label: 'PROCESSED_BY', value: 0.99 },
+                    { from: 202, to: 203, label: 'IDENTIFIES', value: 0.91 },
+                    { from: 201, to: 204, label: 'USES_PROTOCOL', value: 0.87 },
+                    { from: 203, to: 205, label: 'MAPPED_TO_KG', value: 0.96 }
+                ]
+            }
+        };
+
+        // Initialize Vis.js Network Canvas
+        function initNetwork(presetKey = 'agent-memory') {
+            const container = document.getElementById('network-canvas');
+            const data = presetsData[presetKey] || presetsData['agent-memory'];
+
+            // Map styled node colors
+            const formattedNodes = data.nodes.map(n => ({
+                ...n,
+                shape: 'dot',
+                size: n.group === 'user' ? 22 : n.group === 'semantic' ? 18 : 14,
+                font: { color: '#f3f4f6', face: 'Inter', size: 12 },
+                color: nodeColors[n.group] || nodeColors['entity']
+            }));
+
+            const formattedEdges = data.edges.map(e => ({
+                ...e,
+                width: e.value * 3,
+                color: { color: 'rgba(59, 130, 246, 0.4)', highlight: '#3b82f6' },
+                font: { color: '#9ca3af', size: 9, align: 'middle', background: '#090d16' },
+                smooth: { type: 'continuous' }
+            }));
+
+            nodesDataSet = new vis.DataSet(formattedNodes);
+            edgesDataSet = new vis.DataSet(formattedEdges);
+
+            const options = {
+                nodes: { borderWidth: 2, shadow: true },
+                edges: { shadow: false },
+                physics: {
+                    barnesHut: { gravitationalConstant: -3000, centralGravity: 0.3, springLength: 120 },
+                    stabilization: { iterations: 150 }
+                },
+                interaction: { hover: true, tooltipDelay: 100 }
+            };
+
+            network = new vis.Network(container, { nodes: nodesDataSet, edges: edgesDataSet }, options);
+
+            // Node Click Inspector Handler
+            network.on("click", function (params) {
+                if (params.nodes.length > 0) {
+                    selectedNodeId = params.nodes[0];
+                    showNodeDetails(selectedNodeId);
+                } else {
+                    selectedNodeId = null;
+                    hideNodeDetails();
+                }
+            });
+        }
+
+        // Display Selected Node Metadata in Drawer
+        function showNodeDetails(nodeId) {
+            const node = nodesDataSet.get(nodeId);
+            if (!node) return;
+
+            document.getElementById('node-inspector-empty').classList.add('hidden');
+            document.getElementById('node-inspector-content').classList.remove('hidden');
+            document.getElementById('selected-node-badge').classList.remove('hidden');
+            document.getElementById('selected-node-badge').innerText = `ID: ${node.id}`;
+
+            document.getElementById('inspector-title').innerText = node.label;
+            document.getElementById('inspector-id').innerText = `NODE-${node.id}`;
+            document.getElementById('inspector-type').innerText = node.group.toUpperCase();
+            document.getElementById('inspector-pagerank').innerText = (Math.random() * 0.1).toFixed(4);
+
+            // Mock embedding vector output
+            const mockVector = Array.from({length: 4}, () => (Math.random() * 2 - 1).toFixed(4)).join(', ');
+            document.getElementById('inspector-embedding').innerText = `[${mockVector}, ...]`;
+
+            // Fetch Connected Neighbors
+            const connectedEdges = edgesDataSet.get({
+                filter: function (item) { return item.from === nodeId || item.to === nodeId; }
+            });
+            
+            const neighborsList = document.getElementById('inspector-neighbors');
+            neighborsList.innerHTML = '';
+            connectedEdges.forEach(edge => {
+                const targetId = edge.from === nodeId ? edge.to : edge.from;
+                const targetNode = nodesDataSet.get(targetId);
+                if (targetNode) {
+                    const li = document.createElement('li');
+                    li.innerText = `${edge.label} → ${targetNode.label}`;
+                    neighborsList.appendChild(li);
+                }
+            });
+
+            // Switch to inspector tab automatically
+            switchTab('node-details');
+        }
+
+        function hideNodeDetails() {
+            document.getElementById('node-inspector-empty').classList.remove('hidden');
+            document.getElementById('node-inspector-content').classList.add('hidden');
+            document.getElementById('selected-node-badge').classList.add('hidden');
+        }
+
+        // Query Simulation & JSON Telemetry Trigger
+        function runQuerySimulation() {
+            const queryVal = document.getElementById('query-input').value;
+            const hopVal = document.getElementById('hop-depth').value;
+            const confVal = document.getElementById('conf-threshold').value;
+
+            const mockTelemetry = {
+                timestamp: new Date().toISOString(),
+                query: queryVal,
+                graphrag_engine: {
+                    retrieval_mode: "Hybrid GraphRAG + Vector Embedding",
+                    subgraph_traversal_depth: `${hopVal} hops`,
+                    confidence_cutoff: parseFloat(confVal),
+                    nodes_searched: 14820,
+                    edges_evaluated: 68410
+                },
+                results: {
+                    top_k_retrieved_entities: [
+                        { entity: "Python AST Parser", confidence: 0.9482, vector_distance: 0.0518 },
+                        { entity: "Concurrency Primitives", confidence: 0.9120, vector_distance: 0.0880 },
+                        { entity: "Memory Safety", confidence: 0.8641, vector_distance: 0.1359 }
+                    ],
+                    path_reasoning: [
+                        "User Context -> Intent: Code Refactor",
+                        "Intent: Code Refactor -> GraphRAG Retrieval Core",
+                        "GraphRAG Retrieval Core -> Entity: Python AST Parser"
+                    ],
+                    latency_breakdown_ms: {
+                        vector_knn: 3.2,
+                        graph_traversal: 8.4,
+                        llm_context_formatting: 2.6,
+                        total_end_to_end: 14.2
+                    }
+                }
+            };
+
+            document.getElementById('json-output').innerText = JSON.stringify(mockTelemetry, null, 2);
+            document.getElementById('live-latency').innerText = `${(10 + Math.random() * 8).toFixed(1)} ms`;
+
+            // Highlight nodes on map
+            network.selectNodes([1, 2, 5, 7]);
+        }
+
+        // Tab Switching Handler
+        function switchTab(tabKey) {
+            document.querySelectorAll('.drawer-tab').forEach(tab => {
+                if (tab.dataset.tab === tabKey) {
+                    tab.classList.add('text-blue-400', 'border-blue-500', 'active');
+                    tab.classList.remove('text-gray-400', 'border-transparent');
+                } else {
+                    tab.classList.remove('text-blue-400', 'border-blue-500', 'active');
+                    tab.classList.add('text-gray-400', 'border-transparent');
+                }
+            });
+
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            document.getElementById(`tab-${tabKey}`).classList.remove('hidden');
+        }
+
+        // Charts Initialization (Chart.js)
+        function initCharts() {
+            // Chart 1: Recall Performance
+            const ctxRecall = document.getElementById('chart-recall').getContext('2d');
+            new Chart(ctxRecall, {
+                type: 'line',
+                data: {
+                    labels: ['k=1', 'k=3', 'k=5', 'k=10', 'k=20'],
+                    datasets: [
+                        {
+                            label: 'GraphRAG Hybrid',
+                            data: [0.72, 0.86, 0.92, 0.96, 0.99],
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Vector-Only KNN',
+                            data: [0.55, 0.68, 0.74, 0.81, 0.85],
+                            borderColor: '#6b7280',
+                            borderDash: [5, 5],
+                            fill: false,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#9ca3af', font: { size: 10 } } } },
+                    scales: {
+                        x: { ticks: { color: '#6b7280' }, grid: { color: '#1f293d' } },
+                        y: { ticks: { color: '#6b7280' }, grid: { color: '#1f293d' }, max: 1.0 }
+                    }
+                }
+            });
+
+            // Chart 2: Centrality Distribution
+            const ctxCentrality = document.getElementById('chart-centrality').getContext('2d');
+            new Chart(ctxCentrality, {
+                type: 'bar',
+                data: {
+                    labels: ['User Queries', 'Episodic Traces', 'Semantic Nodes', 'Entities', 'Procedural'],
+                    datasets: [{
+                        label: 'Avg In-Degree Connections',
+                        data: [4, 12, 38, 24, 9],
+                        backgroundColor: ['#ec4899', '#a855f7', '#3b82f6', '#10b981', '#f59e0b']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#6b7280' }, grid: { color: '#1f293d' } },
+                        y: { ticks: { color: '#6b7280' }, grid: { color: '#1f293d' } }
+                    }
+                }
+            });
+        }
+
+        // Event Listeners Attachment
+        window.onload = function() {
+            initNetwork('agent-memory');
+            initCharts();
+            runQuerySimulation();
+
+            // Preset Selector Event
+            document.getElementById('preset-selector').addEventListener('change', function(e) {
+                initNetwork(e.target.value);
+            });
+
+            // Sliders Updates
+            document.getElementById('hop-depth').addEventListener('input', function(e) {
+                document.getElementById('hop-val').innerText = `${e.target.value} Hops`;
+            });
+            document.getElementById('conf-threshold').addEventListener('input', function(e) {
+                document.getElementById('conf-val').innerText = e.target.value;
+            });
+            document.getElementById('memory-decay').addEventListener('input', function(e) {
+                document.getElementById('decay-val').innerText = `${e.target.value} /hr`;
+            });
+
+            // Canvas Zoom & Control Buttons
+            document.getElementById('zoom-in').addEventListener('click', () => {
+                network.moveTo({ scale: network.getScale() * 1.2 });
+            });
+            document.getElementById('zoom-out').addEventListener('click', () => {
+                network.moveTo({ scale: network.getScale() * 0.8 });
+            });
+            document.getElementById('fit-canvas').addEventListener('click', () => {
+                network.fit({ animation: { duration: 500 } });
+            });
+            document.getElementById('toggle-physics').addEventListener('click', function() {
+                physicsEnabled = !physicsEnabled;
+                network.setOptions({ physics: { enabled: physicsEnabled } });
+                this.classList.toggle('bg-blue-500/10');
+                this.classList.toggle('bg-red-500/10');
+                this.classList.toggle('text-blue-400');
+                this.classList.toggle('text-red-400');
+                this.innerHTML = physicsEnabled ? '<i class="fa-solid fa-pause text-[10px]"></i> Freeze Topology' : '<i class="fa-solid fa-play text-[10px]"></i> Resume Physics';
+            });
+
+            // Reset & Export Buttons
+            document.getElementById('reset-graph-btn').addEventListener('click', () => {
+                initNetwork(document.getElementById('preset-selector').value);
+            });
+            document.getElementById('run-query-btn').addEventListener('click', runQuerySimulation);
+
+            // Tab Buttons
+            document.querySelectorAll('.drawer-tab').forEach(tab => {
+                tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+            });
+
+            // Trigger Memory Consolidation Action
+            document.getElementById('consolidate-btn').addEventListener('click', () => {
+                // Dynamically append new consolidated node
+                const newNodeId = Date.now();
+                nodesDataSet.add({
+                    id: newNodeId,
+                    label: `Consolidated Memory #${Math.floor(Math.random()*900 + 100)}`,
+                    group: 'procedural',
+                    shape: 'dot',
+                    size: 16,
+                    color: nodeColors['procedural'],
+                    font: { color: '#f3f4f6', face: 'Inter', size: 12 }
+                });
+                edgesDataSet.add({
+                    from: 5,
+                    to: newNodeId,
+                    label: 'CONSOLIDATED',
+                    value: 0.88,
+                    color: { color: 'rgba(245, 158, 11, 0.6)' }
+                });
+                network.focus(newNodeId, { scale: 1.1, animation: { duration: 800 } });
+            });
+        };
+    </script>
+</body>
+</html>
